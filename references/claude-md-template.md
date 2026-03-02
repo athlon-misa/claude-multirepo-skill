@@ -29,7 +29,7 @@ The following packages or services are **NOT owned by this repo**. They come fro
 When you encounter a bug or need a feature change in any dependency listed above:
 
 1. **Do NOT attempt to fix it in this repository.** No monkey-patching, no local overrides, no "temporary" forks of the dependency code.
-2. **Draft a GitHub issue** targeting the source repository. Use the templates below.
+2. **Draft a GitHub issue** targeting the source repository. Use the appropriate issue template (bug report, feature request, or breaking change).
 3. **Always ask the user for confirmation** before filing the issue. Show them the full issue preview.
 4. After filing, you may create a minimal marked workaround in this repo if needed to unblock work. Always include a `TODO({{ISSUE_URL}})` comment referencing the upstream issue.
 
@@ -37,44 +37,8 @@ When you encounter a bug or need a feature change in any dependency listed above
 
 Use `gh issue create` with these defaults:
 - **Repo:** `{{SOURCE_REPO_OWNER}}/{{SOURCE_REPO_NAME}}`
-- **Labels:** `cross-repo`, plus `bug` or `enhancement` as appropriate
-- **Body format:** See issue template below
-
-### Bug issue template
-```
-**Source:** Filed from {{THIS_REPO_NAME}} ({{THIS_REPO_URL}})
-**Dependency version:** {{VERSION}}
-
-## Description
-[What went wrong]
-
-## Steps to reproduce
-[From the consuming repo's perspective]
-
-## Expected behavior
-[What should happen]
-
-## Actual behavior
-[What actually happens]
-
-## Context
-[Any relevant logs, stack traces, or code snippets]
-```
-
-### Feature request template
-```
-**Source:** Filed from {{THIS_REPO_NAME}} ({{THIS_REPO_URL}})
-**Dependency version:** {{VERSION}}
-
-## Desired change
-[What API or behavior change is needed]
-
-## Use case
-[Why the consuming repo needs this — what are you trying to build]
-
-## Suggested approach
-[Optional — if you have ideas on how the upstream repo could implement this]
-```
+- **Labels:** `cross-repo`, plus `bug`, `enhancement`, or `breaking-change` as appropriate
+- **Body:** Always include: consumer repo name + URL, dependency version, reproduction steps, expected vs actual behavior
 
 ## Receiving cross-repo issues
 

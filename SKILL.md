@@ -74,19 +74,14 @@ Once initialized, the CLAUDE.md in each repo instructs the agent to follow these
 
 1. **Identify the source** — check if the buggy package/service is listed in the dependency map
 2. **Do NOT fix it locally** — no monkey-patching, no local forks, no "temporary workarounds" committed to this repo
-3. **Draft a GitHub issue** for the upstream repo, including:
-   - A clear title describing the bug
-   - Steps to reproduce (from the consuming repo's perspective)
-   - Expected vs actual behavior
-   - The version of the dependency being used
-   - Label suggestion (e.g., `bug`, `cross-repo`)
+3. **Draft a GitHub issue** for the upstream repo using the bug report template from `references/issue-templates.md`
 4. **Show the draft to the user** and ask: "I've identified this as a bug in [repo-name]. Here's a draft issue. Should I file it?"
 5. **Only after user confirms**, use the GitHub CLI (`gh issue create`) or the GitHub API to file the issue
 6. **Optionally**, create a minimal local workaround clearly marked as temporary (with a `TODO` referencing the issue number)
 
 ### When the agent needs a new feature from a dependency
 
-Same flow as bugs, but the issue is labeled `enhancement` or `feature-request` and the body describes the desired API or behavior change, along with the use case from the consuming repo.
+Same flow as bugs, but use the feature request template from `references/issue-templates.md`. Label with `enhancement` instead of `bug`.
 
 ### When the agent receives an issue filed by a sibling repo's agent
 
@@ -126,9 +121,18 @@ Users can trigger specific actions:
 
 ---
 
+## Prerequisites
+
+The user needs the GitHub CLI (`gh`) installed and authenticated to file cross-repo issues. If `gh` is not available, draft the issue body and present it to the user to file manually.
+
+Verify before filing:
+```bash
+gh auth status
+```
+
 ## File reference
 
-- `references/claude-md-template.md` — Template for generating per-repo CLAUDE.md content
-- `references/manifest-schema.md` — Schema for the shared .multi-repo-manifest.json
-- `references/issue-templates.md` — GitHub issue body templates for bugs and feature requests
-- `scripts/detect-deps.sh` — Helper script to auto-detect cross-repo dependencies from package files
+- `references/claude-md-template.md` — Template for generating per-repo CLAUDE.md content. Read this before generating any CLAUDE.md files.
+- `references/manifest-schema.md` — Schema and example for `.multi-repo-manifest.json`. Read this before generating manifests.
+- `references/issue-templates.md` — GitHub issue body templates for bugs, feature requests, and breaking changes. Read the appropriate template before drafting any cross-repo issue.
+- `scripts/detect-deps.sh` — Run this against each repo path to auto-detect dependencies from package files. Output is JSON.

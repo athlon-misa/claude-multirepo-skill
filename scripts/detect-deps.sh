@@ -4,8 +4,8 @@
 # Usage: ./detect-deps.sh /path/to/repo
 #
 # Scans a repository for dependency declarations and prints them as JSON.
-# Supports: package.json (npm), requirements.txt (pip), go.mod (Go),
-#           Cargo.toml (Rust), pubspec.yaml (Dart/Flutter)
+# Supports: package.json (npm), requirements.txt (pip), pyproject.toml (Python),
+#           go.mod (Go), Cargo.toml (Rust)
 #
 # The output is a flat list of dependency names. The agent then matches
 # these against the `owns` list in sibling repos to detect cross-repo deps.
