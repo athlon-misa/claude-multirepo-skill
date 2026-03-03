@@ -20,16 +20,26 @@ The game agent hits a bug in the login SDK. Without coordination, it tries to fi
 
 ## Install
 
-### Claude Code (CLI)
+This skill uses `disable-model-invocation: true`, so it adds **zero token overhead** to projects where you don't use it. It's only loaded when you manually invoke `/multi-repo-agent`.
 
-**Personal install** — available across all your projects:
+### Global install (recommended)
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/multi-repo-agent.git
 cp -r multi-repo-agent ~/.claude/skills/multi-repo-agent
 ```
 
-**Project install** — scoped to one project:
+Or from a local copy:
+
+```bash
+tar xzf multi-repo-agent.skill -C ~/.claude/skills/
+```
+
+This makes the skill available in every project via `/multi-repo-agent`, with no context cost until you invoke it.
+
+### Project install
+
+If you only want it in a specific project:
 
 ```bash
 cd your-project
@@ -37,17 +47,17 @@ mkdir -p .claude/skills
 cp -r /path/to/multi-repo-agent .claude/skills/multi-repo-agent
 ```
 
-### Quick one-liner (Claude Code)
-
-```bash
-git clone https://github.com/YOUR_USERNAME/multi-repo-agent.git ~/.claude/skills/multi-repo-agent
-```
-
 ## Usage
 
 ### Initialize your repos
 
-Open Claude Code in any of your project repos and say:
+Open Claude Code in any of your project repos and invoke the skill:
+
+```
+/multi-repo-agent
+```
+
+Then say:
 
 ```
 Initialize multi-repo coordination for my projects
@@ -69,7 +79,7 @@ The skill will:
 3. Generate a `CLAUDE.md` (or append to your existing one) in each repo
 4. Create a `.multi-repo-manifest.json` in each repo
 
-After that, every Claude Code session in those repos will know the rules automatically.
+After that, every Claude Code session in those repos will know the rules automatically — **no need to invoke the skill again** for day-to-day work.
 
 ### During development
 
@@ -82,6 +92,8 @@ You don't need to do anything special. The generated `CLAUDE.md` handles it. Whe
 5. Optionally leave a `TODO` workaround referencing the issue
 
 ### Commands
+
+Invoke `/multi-repo-agent` first, then use these commands:
 
 | Say this | What happens |
 |---|---|
@@ -170,7 +182,10 @@ It's designed for multi-repo setups. In a monorepo you'd typically use workspace
 Works fine. The GitHub CLI (`gh`) handles authentication. Just make sure it's authenticated with access to all the repos in your project.
 
 **Do I need to install the skill in every repo?**
-No. Install the skill once (in `~/.claude/skills/` for personal, or per-project). The skill generates `CLAUDE.md` and `.multi-repo-manifest.json` files in each repo — those are what the agents read day-to-day.
+No. Install the skill once globally (in `~/.claude/skills/`). Run `/multi-repo-agent` to initialize your repos — this generates `CLAUDE.md` and `.multi-repo-manifest.json` files in each repo. Those files are what agents read day-to-day, with zero token overhead from the skill itself.
+
+**Does this skill add to my token usage?**
+No. It uses `disable-model-invocation: true`, so it's never loaded into context unless you explicitly invoke `/multi-repo-agent`. The generated `CLAUDE.md` files handle ongoing behavior — those are loaded as normal project instructions.
 
 ## Contributing
 

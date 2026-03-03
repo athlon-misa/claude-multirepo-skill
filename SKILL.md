@@ -1,6 +1,7 @@
 ---
 name: multi-repo-agent
-description: "Coordinate Claude Code agents working across multiple repositories that depend on each other. Use this skill whenever a user mentions working on multiple repos, cross-project dependencies, SDK bugs originating from another project, multi-service architectures, or microservices that need to talk to each other. Also trigger when the user mentions 'monorepo alternative', 'cross-repo issues', 'agent coordination', 'multi-project setup', or wants Claude to file issues/PRs on a dependency repo instead of hacking around problems locally. This skill handles initialization (detecting repos and their relationships), generating per-repo CLAUDE.md ownership rules, and routing bugs/feature requests to the correct repo via GitHub issues — with user confirmation before any cross-repo action."
+disable-model-invocation: true
+description: "Coordinate Claude Code agents working across multiple repositories that depend on each other. Invoke manually with /multi-repo-agent when you want to initialize multi-repo coordination, update repo manifests, or route bugs/feature requests to upstream repos. After initialization, the generated CLAUDE.md files in each repo handle day-to-day routing automatically — you only need to invoke this skill again for setup changes."
 ---
 
 # Multi-Repo Agent Coordination
@@ -112,12 +113,14 @@ I've drafted a GitHub issue for the OpenFederation repo. Want me to file it?
 
 ## Commands
 
-Users can trigger specific actions:
+This skill uses `disable-model-invocation: true`, so it is **never loaded automatically**. Invoke it manually with `/multi-repo-agent` and then use one of these commands:
 
 - **"initialize repos"** or **"set up multi-repo"** — runs the full initialization flow
 - **"show repo map"** — displays the current dependency topology
 - **"route this bug"** — manually triggers the bug-routing flow for a specific issue the agent found
 - **"update manifest"** — regenerates the manifest after repos change
+
+After initialization, the generated `CLAUDE.md` files handle all cross-repo routing automatically. You only need to invoke `/multi-repo-agent` again when changing the repo topology or for manual routing.
 
 ---
 
