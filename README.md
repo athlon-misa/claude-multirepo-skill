@@ -101,6 +101,8 @@ Invoke `/multi-repo-agent` first, then use these commands:
 | `show repo map` | Displays current dependency topology |
 | `route this bug` | Manually trigger bug-routing for something the agent found |
 | `update manifest` | Regenerate the manifest after adding/removing repos |
+| `check issues` | Show open `cross-repo` issues — incoming (need fixing here) and outgoing (waiting on siblings) |
+| `plan fix` or `plan fix #47` | Read a cross-repo issue, analyze the codebase, and propose a fix plan |
 
 ## Example workflow
 
@@ -122,6 +124,44 @@ You: "Yes, file it"
 
 Agent: Filed as OpenFederation#47. I've added a temporary workaround
        with a TODO(OpenFederation#47) comment so we can keep working.
+```
+
+### Checking and fixing incoming issues
+
+```
+You (in OpenFederation repo): /multi-repo-agent
+You: check issues
+
+Agent: Cross-repo issue summary for OpenFederation:
+
+       Incoming (1):
+         #47 — Token refresh returns 401 on expired tokens (2 days ago)
+
+       Outgoing (0):
+         All clear.
+
+You: plan fix #47
+
+Agent: I've analyzed issue #47. Here's my fix plan:
+
+       Root cause: TokenManager.refresh() checks expiry AFTER sending
+       the request, so expired tokens hit the API and get a 401.
+
+       Proposed changes:
+         • src/auth/token-manager.ts — move expiry check before the
+           API call; if expired, refresh first then retry
+         • tests/auth/token-manager.test.ts — add test for expired
+           token refresh flow
+
+       PR plan:
+         Branch: fix/cross-repo-47
+         Message: "Fix token refresh on expired tokens (Fixes #47)"
+
+       Want me to implement this?
+
+You: yes
+
+Agent: Done. PR #52 opened on OpenFederation referencing issue #47.
 ```
 
 ## What gets generated

@@ -47,6 +47,8 @@ If you see issues labeled `cross-repo` filed against this repository:
 - Treat them as high-priority bug reports or feature requests
 - When creating a PR to fix them, reference the original issue number
 - After fixing, notify the user so the downstream repo can update its dependency
+- To see all open cross-repo issues, invoke `/multi-repo-agent` then say `check issues`
+- To analyze an issue and get a fix plan, invoke `/multi-repo-agent` then say `plan fix` or `plan fix #<number>`
 
 ## Project topology
 

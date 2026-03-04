@@ -119,8 +119,67 @@ This skill uses `disable-model-invocation: true`, so it is **never loaded automa
 - **"show repo map"** — displays the current dependency topology
 - **"route this bug"** — manually triggers the bug-routing flow for a specific issue the agent found
 - **"update manifest"** — regenerates the manifest after repos change
+- **"check issues"** — queries GitHub for open `cross-repo`-labeled issues (both incoming and outgoing)
+- **"plan fix"** or **"plan fix #47"** — reads a cross-repo issue, analyzes the codebase, and proposes a fix plan
 
-After initialization, the generated `CLAUDE.md` files handle all cross-repo routing automatically. You only need to invoke `/multi-repo-agent` again when changing the repo topology or for manual routing.
+After initialization, the generated `CLAUDE.md` files handle all cross-repo routing automatically. You only need to invoke `/multi-repo-agent` again when changing the repo topology, for manual routing, or to check/fix incoming issues.
+
+---
+
+## Checking and fixing cross-repo issues
+
+### `check issues`
+
+This command queries GitHub for open issues labeled `cross-repo`, showing both issues filed against this repo and issues this repo filed on siblings.
+
+**Steps:**
+
+1. **Read `.multi-repo-manifest.json`** from the current repo root. If missing, tell the user: "No manifest found — run `initialize repos` first."
+2. **Identify the current repo** by running `git remote get-url origin` and matching it against the manifest's repo list.
+3. **Query incoming issues** (filed against this repo):
+   ```bash
+   gh issue list -R <this-repo> --label "cross-repo" --state open --json number,title,body,labels,createdAt,url
+   ```
+4. **Query outgoing issues** (filed by this repo on siblings): for each sibling repo in the manifest, run:
+   ```bash
+   gh issue list -R <sibling-repo> --label "cross-repo" --state open --search "in:body <this-repo-name>"
+   ```
+5. **Display a structured summary** with two sections:
+   - **Incoming** — issues other repos filed against this one (these need fixes here)
+   - **Outgoing** — issues this repo filed on siblings (waiting on upstream fixes)
+
+   For each issue show: `#number — title (age)`
+
+**Edge cases:**
+- No manifest → error with setup instructions
+- No issues found → "All clear — no open cross-repo issues."
+- `gh` not authenticated → show manual GitHub URLs for each repo's issue page
+
+### `plan fix`
+
+This command reads a cross-repo issue, analyzes the local codebase, and proposes a fix plan.
+
+**Steps:**
+
+1. **Manifest guard** — same as `check issues`. Error if `.multi-repo-manifest.json` is missing.
+2. **Select an issue:**
+   - If the user provides an issue number (e.g., `plan fix #47`) → fetch it directly:
+     ```bash
+     gh issue view 47 -R <this-repo> --json number,title,body,labels,url
+     ```
+   - If no number → list incoming `cross-repo` issues. If exactly one, auto-select it. If multiple, prompt the user to pick one.
+3. **Parse the issue body** for context: consumer repo, affected package/module, reproduction steps, expected vs actual behavior.
+4. **Analyze the local codebase** to locate the relevant code and identify the root cause. Use the reproduction steps and affected module from the issue to guide the search.
+5. **Present a fix plan** to the user:
+   - **Root cause** — what's wrong and where
+   - **Proposed changes** — files to modify and what the fix looks like
+   - **PR plan** — suggested branch name (e.g., `fix/cross-repo-47`), commit message, and issue reference (`Fixes #47`)
+6. **If the user confirms** → implement the fix, create a branch, commit, and open a PR referencing the original issue.
+
+**Edge cases:**
+- No incoming issues → "Nothing to plan — no open cross-repo issues filed against this repo."
+- Issue from an unknown repo → proceed anyway (the issue body contains enough context)
+- Issue lacks detail → ask the user for clarification before proposing a plan
 
 ---
 
