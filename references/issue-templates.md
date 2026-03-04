@@ -2,6 +2,8 @@
 
 These templates are used by agents when filing issues on sibling repositories. They provide structured information that helps the receiving repo's agent (or human) understand and fix the problem quickly.
 
+> **Third-party repos:** When filing against a repo with `role: "third-party"` in the manifest, use only information already available from the consumer repo's context — error messages, stack traces, reproduction steps, and expected vs actual behavior. Do NOT attempt to analyze the third-party repo's source code or suggest implementation-level fixes.
+
 ---
 
 ## Bug Report Template

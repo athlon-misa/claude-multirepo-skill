@@ -4,9 +4,9 @@ A Claude Code skill that coordinates AI agents working across multiple repositor
 
 ## The problem
 
-You're working on multiple repos that depend on each other. Maybe an identity platform with a login SDK, a game that imports that SDK, and a leaderboard service. You have Claude Code open in each project.
+You're working on multiple repos that depend on each other. Maybe an auth service with an SDK, a web app that imports that SDK, and a billing API. You have Claude Code open in each project.
 
-The game agent hits a bug in the login SDK. Without coordination, it tries to fix the SDK bug inside the game repo — monkey-patching, forking, or working around it. The fix belongs in the SDK repo, not the game.
+The web app agent hits a bug in the auth SDK. Without coordination, it tries to fix the SDK bug inside the web app repo — monkey-patching, forking, or working around it. The fix belongs in the auth service repo, not the web app.
 
 **multi-repo-agent** teaches each agent where its ownership boundaries are and how to route problems to the right place.
 
@@ -16,6 +16,8 @@ The game agent hits a bug in the login SDK. Without coordination, it tries to fi
 - **Generates `CLAUDE.md` files** per repo with ownership rules, dependency maps, and routing instructions
 - **Creates a `.multi-repo-manifest.json`** so agents can programmatically look up where to send issues
 - **Routes bugs and feature requests** to the correct upstream repo via GitHub issues
+- **Classifies repos as owned or third-party** — skips expensive analysis on deps you can't change, files issues with consumer-side context only
+- **Progressive-depth analysis** — starts with a targeted scan of 1-3 files and only widens when needed, saving tokens on simple issues
 - **Always asks for confirmation** before filing anything cross-repo
 
 ## Install
@@ -67,9 +69,9 @@ Or be specific:
 
 ```
 Set up multi-repo for these repos:
-- OpenFederation (https://github.com/myorg/OpenFederation) — identity platform + login SDK
-- game-leaderboard (https://github.com/myorg/game-leaderboard) — score tracking service
-- mini-game (https://github.com/myorg/mini-game) — the game client
+- auth-service (https://github.com/acme/auth-service) — authentication + auth SDK
+- billing-api (https://github.com/acme/billing-api) — billing and payments service
+- web-app (https://github.com/acme/web-app) — the frontend application
 ```
 
 The skill will:
@@ -107,32 +109,48 @@ Invoke `/multi-repo-agent` first, then use these commands:
 ## Example workflow
 
 ```
-You (in mini-game repo): "The login flow crashes when the token expires"
+You (in web-app repo): "The login flow crashes when the token expires"
 
-Agent: I've identified this as a bug in @openfederation/login-sdk
-       (owned by the OpenFederation repo). The SDK returns a 401
+Agent: I've identified this as a bug in @acme/auth-sdk
+       (owned by the auth-service repo). The SDK returns a 401
        instead of triggering a token refresh.
 
-       Here's a draft GitHub issue for OpenFederation:
+       Here's a draft GitHub issue for auth-service:
 
        Title: [cross-repo] Token refresh returns 401 on expired tokens
-       Body: [full reproduction steps from mini-game's perspective]
+       Body: [full reproduction steps from web-app's perspective]
 
-       Should I file this on the OpenFederation repo?
+       Should I file this on the auth-service repo?
 
 You: "Yes, file it"
 
-Agent: Filed as OpenFederation#47. I've added a temporary workaround
-       with a TODO(OpenFederation#47) comment so we can keep working.
+Agent: Filed as auth-service#47. I've added a temporary workaround
+       with a TODO(auth-service#47) comment so we can keep working.
 ```
+
+### Third-party dependency bug
+
+```
+You (in web-app repo): "Redis connections are dropping under load"
+
+Agent: redis is a third-party dependency — I won't analyze its source code.
+       Based on the error logs in this repo, here's a draft issue:
+
+       Title: [cross-repo] Connection drops under sustained load (>100 concurrent)
+       Body: [error messages, connection config, reproduction steps from web-app]
+
+       Should I file this on the redis repo?
+```
+
+The agent skips code analysis entirely for third-party repos, saving tokens and filing issues with only the information available from your codebase.
 
 ### Checking and fixing incoming issues
 
 ```
-You (in OpenFederation repo): /multi-repo-agent
+You (in auth-service repo): /multi-repo-agent
 You: check issues
 
-Agent: Cross-repo issue summary for OpenFederation:
+Agent: Cross-repo issue summary for auth-service:
 
        Incoming (1):
          #47 — Token refresh returns 401 on expired tokens (2 days ago)
@@ -161,7 +179,7 @@ Agent: I've analyzed issue #47. Here's my fix plan:
 
 You: yes
 
-Agent: Done. PR #52 opened on OpenFederation referencing issue #47.
+Agent: Done. PR #52 opened on auth-service referencing issue #47.
 ```
 
 ## What gets generated
@@ -226,6 +244,15 @@ No. Install the skill once globally (in `~/.claude/skills/`). Run `/multi-repo-a
 
 **Does this skill add to my token usage?**
 No. It uses `disable-model-invocation: true`, so it's never loaded into context unless you explicitly invoke `/multi-repo-agent`. The generated `CLAUDE.md` files handle ongoing behavior — those are loaded as normal project instructions.
+
+**How does repo role classification work?**
+During initialization, the skill checks each repo's GitHub org ownership via `gh api` and suggests `owned` (your org) or `third-party` (external). You confirm or override. Third-party repos get lightweight issue-only routing — the agent never analyzes their source code, saving tokens. Repos not in the manifest at all are implicitly third-party.
+
+**How does progressive-depth analysis save tokens?**
+When fixing an issue on an owned repo, the agent starts with a Tier 1 targeted scan (1-3 files). If the root cause is clear — which it often is for issues with stack traces or specific function references — it stops there. It only escalates to Tier 2 (call graph + recent changes) or Tier 3 (full codebase search) when needed. You can also force a specific tier with `plan fix #47 --tier 3`.
+
+**What if I have an old v1.0 manifest?**
+Manifests without a `role` field still work — all repos default to `owned`. Run `update manifest` to upgrade to v1.1 and classify your repos.
 
 ## Contributing
 

@@ -28,19 +28,33 @@ Ask the user to confirm:
 - The list of repositories (names + GitHub URLs)
 - Which repos depend on which (e.g., "game imports the login SDK from identity-platform")
 - The GitHub org or owner for issue filing
+- **The role of each repo:** `owned` (you maintain it) or `third-party` (external dependency you don't control)
 
 If the user has a `package.json`, `requirements.txt`, `go.mod`, or similar in each repo, read those to auto-detect cross-repo dependencies. Present your findings and ask for confirmation.
 
+**Auto-classify repo roles:** For each repo, check if it belongs to the user's GitHub org:
+```bash
+gh api repos/{owner}/{repo} --jq '.owner.login'
+```
+If the owner matches the user's org, suggest `owned`. Otherwise, suggest `third-party`. Always confirm with the user — they may own repos in different orgs or want to treat a fork as owned.
+
 **Example conversation:**
 ```
-User: I have three repos — OpenFederation (identity + SDK), game-leaderboard, and mini-game. Set them up.
+User: I have three repos — auth-service (auth + SDK), billing-api,
+      and web-app. We also depend on redis. Set them up.
 
 Agent: I found these relationships:
-  • mini-game depends on @openfederation/login-sdk (from OpenFederation)
-  • mini-game depends on game-leaderboard (API client)
-  • game-leaderboard depends on @openfederation/login-sdk (from OpenFederation)
+  • web-app depends on @acme/auth-sdk (from auth-service)
+  • web-app depends on @acme/billing-client (from billing-api)
+  • billing-api depends on @acme/auth-sdk (from auth-service)
 
-Does this look right? Any missing connections?
+Based on GitHub org ownership, here's how I'd classify each repo:
+  • auth-service   → owned (acme)
+  • billing-api    → owned (acme)
+  • web-app        → owned (acme)
+  • redis          → third-party (redis org)
+
+Does this look right? Any repos I should reclassify?
 ```
 
 ### Step 2: Generate CLAUDE.md files
@@ -74,15 +88,19 @@ Once initialized, the CLAUDE.md in each repo instructs the agent to follow these
 ### When the agent encounters a bug in a dependency
 
 1. **Identify the source** — check if the buggy package/service is listed in the dependency map
-2. **Do NOT fix it locally** — no monkey-patching, no local forks, no "temporary workarounds" committed to this repo
-3. **Draft a GitHub issue** for the upstream repo using the bug report template from `references/issue-templates.md`
-4. **Show the draft to the user** and ask: "I've identified this as a bug in [repo-name]. Here's a draft issue. Should I file it?"
-5. **Only after user confirms**, use the GitHub CLI (`gh issue create`) or the GitHub API to file the issue
-6. **Optionally**, create a minimal local workaround clearly marked as temporary (with a `TODO` referencing the issue number)
+2. **Check the repo's role** in `.multi-repo-manifest.json`:
+   - **`third-party`** → Do NOT analyze the dependency's source code. Draft a GitHub issue using only information available from this consumer repo (error messages, stack traces, reproduction steps). Skip to step 4.
+   - **`owned`** → Proceed with full analysis and routing flow below.
+   - If the dependency is **not in the manifest**, treat it as third-party.
+3. **Do NOT fix it locally** — no monkey-patching, no local forks, no "temporary workarounds" committed to this repo
+4. **Draft a GitHub issue** for the upstream repo using the bug report template from `references/issue-templates.md`
+5. **Show the draft to the user** and ask: "I've identified this as a bug in [repo-name]. Here's a draft issue. Should I file it?"
+6. **Only after user confirms**, use the GitHub CLI (`gh issue create`) or the GitHub API to file the issue
+7. **Optionally**, create a minimal local workaround clearly marked as temporary (with a `TODO` referencing the issue number)
 
 ### When the agent needs a new feature from a dependency
 
-Same flow as bugs, but use the feature request template from `references/issue-templates.md`. Label with `enhancement` instead of `bug`.
+Same flow as bugs, but use the feature request template from `references/issue-templates.md`. Label with `enhancement` instead of `bug`. The same role check applies — for third-party repos, skip code analysis and file the request with consumer-side context only.
 
 ### When the agent receives an issue filed by a sibling repo's agent
 
@@ -102,10 +120,10 @@ Every cross-repo action requires explicit user confirmation. The agent must neve
 
 The confirmation prompt should be clear and concise:
 ```
-I found a bug in the login SDK (from OpenFederation) — token refresh 
+I found a bug in @acme/auth-sdk (from auth-service) — token refresh
 returns 401 when the token is expired instead of triggering a refresh.
 
-I've drafted a GitHub issue for the OpenFederation repo. Want me to file it?
+I've drafted a GitHub issue for the auth-service repo. Want me to file it?
 [Shows issue title + body preview]
 ```
 
@@ -148,7 +166,8 @@ This command queries GitHub for open issues labeled `cross-repo`, showing both i
    - **Incoming** — issues other repos filed against this one (these need fixes here)
    - **Outgoing** — issues this repo filed on siblings (waiting on upstream fixes)
 
-   For each issue show: `#number — title (age)`
+   For each issue show: `#number — title (age) [role]`
+   where `[role]` is `[owned]` or `[third-party]` based on the source/target repo's role in the manifest. This helps the user prioritize: owned = actionable here, third-party = waiting on external maintainers.
 
 **Edge cases:**
 - No manifest → error with setup instructions
@@ -157,7 +176,7 @@ This command queries GitHub for open issues labeled `cross-repo`, showing both i
 
 ### `plan fix`
 
-This command reads a cross-repo issue, analyzes the local codebase, and proposes a fix plan.
+This command reads a cross-repo issue, analyzes the local codebase using progressive-depth analysis, and proposes a fix plan. It minimizes token usage by starting with a targeted scan and only widening the search when needed.
 
 **Steps:**
 
@@ -169,17 +188,49 @@ This command reads a cross-repo issue, analyzes the local codebase, and proposes
      ```
    - If no number → list incoming `cross-repo` issues. If exactly one, auto-select it. If multiple, prompt the user to pick one.
 3. **Parse the issue body** for context: consumer repo, affected package/module, reproduction steps, expected vs actual behavior.
-4. **Analyze the local codebase** to locate the relevant code and identify the root cause. Use the reproduction steps and affected module from the issue to guide the search.
-5. **Present a fix plan** to the user:
+4. **Assess complexity** to choose the starting analysis tier:
+   - **Simple signals** (start at Tier 1): issue names a specific function or file, has a clear stack trace pointing to a single location, or is a known error pattern (typo, off-by-one, missing null check)
+   - **Complex signals** (start at Tier 2): issue describes behavioral mismatch without specific code pointers, involves multiple modules, or mentions intermittent/timing-dependent failures
+5. **Analyze using progressive-depth tiers:**
+
+   **Tier 1 — Targeted scan** (minimal token usage):
+   - Read only the 1-3 files directly implicated by the issue (from stack trace, function name, or module reference)
+   - Check if the root cause is clear from those files alone
+   - Tell the user: *"Starting with a targeted scan of [file list]."*
+   - If root cause is found → proceed to step 6
+   - If not → escalate to Tier 2, tell the user: *"Targeted scan wasn't enough — widening to contextual analysis."*
+
+   **Tier 2 — Contextual analysis** (moderate token usage):
+   - Trace the call graph 2 levels deep from the affected code (callers and callees)
+   - Check test file names for the module (`grep -r` for test files referencing the affected module)
+   - Review recent changes: `git log -20 --oneline -- <affected-paths>`
+   - Examine related modules in the dependency chain
+   - Tell the user: *"Running contextual analysis — tracing call graph and recent changes."*
+   - If root cause is found → proceed to step 6
+   - If not → escalate to Tier 3, tell the user: *"Contextual analysis inconclusive — doing a broad investigation."*
+
+   **Tier 3 — Broad investigation** (full token usage, last resort):
+   - Search the full codebase for the error pattern, message strings, or related symbols
+   - Review config files, integration points, and the full test suite for the affected area
+   - Check for similar past issues or PRs: `gh issue list -R <repo> --search "<error pattern>"`
+   - If root cause is still unclear, propose a diagnostic plan (specific logging, test cases, or experiments) instead of a speculative fix
+   - Tell the user: *"Broad investigation complete. Here's what I found."*
+
+   **User override:** The user can force a specific tier (e.g., "plan fix #47 --tier 3") to skip the progressive ramp-up.
+
+6. **Present a fix plan** to the user:
+   - **Analysis tier used** — which tier(s) were needed
+   - **Confidence level** — high (root cause confirmed), medium (likely root cause, should verify), or low (best guess, recommend diagnostic steps)
    - **Root cause** — what's wrong and where
    - **Proposed changes** — files to modify and what the fix looks like
    - **PR plan** — suggested branch name (e.g., `fix/cross-repo-47`), commit message, and issue reference (`Fixes #47`)
-6. **If the user confirms** → implement the fix, create a branch, commit, and open a PR referencing the original issue.
+7. **If the user confirms** → implement the fix, create a branch, commit, and open a PR referencing the original issue.
 
 **Edge cases:**
 - No incoming issues → "Nothing to plan — no open cross-repo issues filed against this repo."
 - Issue from an unknown repo → proceed anyway (the issue body contains enough context)
 - Issue lacks detail → ask the user for clarification before proposing a plan
+- Issue targets a `third-party` repo → "This issue is against a third-party repo. Use `check issues` to track its status, or file a follow-up with more context."
 
 ---
 
